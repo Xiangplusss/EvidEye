@@ -1,0 +1,15 @@
+# Core
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.5
+openai>=1.30
+PyYAML>=6.0
+Jinja2>=3.1
+tldextract>=5.1
+
+# Browser automation (L1 uses the Playwright Docker image; L2 needs a local Chromium:
+#   pip install -r requirements.txt && playwright install chromium)
+playwright>=1.49
+
+# Tests
+pytest>=8.0

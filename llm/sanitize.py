@@ -11,10 +11,20 @@
   报告渲染与人工复核不受影响；
 - 仅替换触发审核的高危词，其余文本（标题、布局描述、表单结构等）
   原样保留，最大限度保留分析价值。
+
+开关：这是为「云端模型」准备的传输层适配，不是永久设计。
+本地部署模型（Ollama / vLLM）没有内容审核，可设环境变量
+EVIDEYE_SANITIZE=0 关闭本层，届时送入模型的是页面原文，
+报告也可直接引用原文而无需以类别信号代替。
 """
 from __future__ import annotations
 
+import os
 import re
+
+# 本地模型部署后可关闭：EVIDEYE_SANITIZE=0 / false / off
+_DISABLED = os.environ.get("EVIDEYE_SANITIZE", "1").strip().lower() in {
+    "0", "false", "off", "no"}
 
 # 高危词类别表：(编译后正则, 英文类别标签)
 # 英文标签避免标签本身再次触发中文内容审核
@@ -35,7 +45,8 @@ _CATEGORY_PATTERNS: list[tuple[re.Pattern, str]] = [
 _CONTACT_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(?:TG|电报|飞机|t\.me/)[^\s，,。；;：:）)】]*", re.I),
      "[contact:telegram]"),
-    (re.compile(r"(?:微信|威信|VX|V信|加V|wechat)[^\s，,。；;：:）)】]*", re.I),
+    (re.compile(r"(?:微信|威信|VX|V信|加V|wechat)\s*(?:号|ID)?\s*[:：]?\s*"
+                r"(?:[A-Za-z][A-Za-z0-9_\-]{2,}|\d{4,})?", re.I),
      "[contact:wechat]"),
     (re.compile(r"(?:QQ|企鹅)[群号]?[:：\s]*\d{5,12}", re.I), "[contact:qq]"),
     (re.compile(r"(?:客服|联系)[^\s，,。]{0,6}[:：]?\s*[\w\-.]{4,}", re.I),
@@ -45,12 +56,15 @@ _CONTACT_PATTERNS: list[tuple[re.Pattern, str]] = [
 _URL_RE = re.compile(r"(https?://)([^\s\"'<>）)】]+)", re.I)
 _WS_RE = re.compile(r"[ \t]{2,}")
 
+# 已生成的占位符（[flag:xxx] / [contact:xxx]），后续规则不得再次匹配其内容
+_PLACEHOLDER_RE = re.compile(r"\[(?:flag|contact):[^\]\n]*\]")
+
 # 露骨内容行级匹配：命中整行抽象（词级替换挡不住成段露骨描述）
 _EXPLICIT_LINE_RE = re.compile(
     r"AV|口交|做爱|啪啪|强奸|迷奸|幼女|萝莉|偷拍|无码|乱伦|性爱|外流|"
     r"强上|破处|处破|援交|白嫖|换妻|群交|肛交|自慰|射精|高潮|"
     r"处女膜|私处|肉棒|淫|骚|裸聊|床戏|福利姬|极品身材|"
-    r"校服|潜规则|打飞机|性对接|约炮|炮友| stimulated", re.I)t]{2,}")
+    r"校服|潜规则|打飞机|性对接|约炮|炮友| stimulated", re.I)
 
 
 def _sub_count(text: str, pattern: re.Pattern, tag: str) -> str:
@@ -59,6 +73,18 @@ def _sub_count(text: str, pattern: re.Pattern, tag: str) -> str:
     if not hits:
         return text
     return pattern.sub(f"[flag:{tag}]", text) + f" [flag:{tag} x{hits}]"
+
+
+def _sub_keep_placeholders(text: str, pattern: re.Pattern, repl: str) -> str:
+    """只在占位符之外的片段上做替换，避免二次匹配破坏已生成的占位符。"""
+    parts = _PLACEHOLDER_RE.split(text)
+    holes = _PLACEHOLDER_RE.findall(text)
+    out: list[str] = []
+    for i, seg in enumerate(parts):
+        out.append(pattern.sub(repl, seg))
+        if i < len(holes):
+            out.append(holes[i])
+    return "".join(out)
 
 
 def defang_urls(text: str) -> str:
@@ -79,6 +105,9 @@ def sanitize_for_llm(text: str) -> str:
     """
     if not text:
         return text
+    if _DISABLED:
+        # 本地模型部署模式：不过滤，原文直送（云端模式下不可关闭）
+        return text
     # 1) 行级：露骨描述整行替换，保留行数统计（词级替换挡不住成段露骨内容）
     lines, explicit_hits = [], 0
     for line in text.splitlines():
@@ -94,7 +123,7 @@ def sanitize_for_llm(text: str) -> str:
     for pat, tag in _CATEGORY_PATTERNS:
         out = _sub_count(out, pat, tag)
     for pat, tag in _CONTACT_PATTERNS:
-        out = pat.sub(tag, out)
+        out = _sub_keep_placeholders(out, pat, tag)
     out = defang_urls(out)
     return _WS_RE.sub(" ", out)
 

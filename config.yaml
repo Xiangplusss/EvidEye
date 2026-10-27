@@ -2,7 +2,10 @@
 # 注意：API key 一律从环境变量读取，不入代码库
 
 llm:
-  # 切换本地模型时只改这里：provider: local
+  # 当前：云端千问 API（DashScope）；后续改本地部署只需把 provider 改为 local。
+  # 注意：云端会对输入做内容审核，博彩/色情/诈骗原文会触发 data_inspection_failed，
+  # 故 llm/sanitize.py 会在发送前把风险词抽象为 [flag:xxx] 类别信号（原文仍完整存本地库）。
+  # 切换到本地模型后该层不再需要：设环境变量 EVIDEYE_SANITIZE=0 即可原文直送。
   provider: qwen
   qwen:
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
