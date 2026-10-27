@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>诈骗网站识别报告 - {{ domain }}</title>
+<style>
+  :root { --red:#c0392b; --orange:#e67e22; --green:#27ae60; --bg:#f6f7f9; }
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; margin:0; background:var(--bg); color:#2c3e50; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+  .card { background:#fff; border-radius:10px; padding:20px 24px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .url { color:#7f8c8d; word-break:break-all; font-size:14px; }
+  .score-box { display:flex; align-items:center; gap:24px; }
+  .score { font-size:56px; font-weight:700; line-height:1; }
+  .level { display:inline-block; padding:4px 14px; border-radius:999px; color:#fff; font-weight:600; }
+  .level.high { background:var(--red); } .level.medium { background:var(--orange); } .level.low { background:var(--green); }
+  .dims { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px; }
+  .dim { background:#f4f6f8; border-radius:8px; padding:10px 12px; text-align:center; }
+  .dim b { display:block; font-size:20px; }
+  .dim span { font-size:12px; color:#7f8c8d; }
+  .bar { height:6px; background:#e5e8eb; border-radius:3px; margin-top:6px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:#5b8def; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #eef0f2; vertical-align:top; }
+  th { color:#7f8c8d; font-weight:600; white-space:nowrap; }
+  .evidence { margin:6px 0; padding-left:18px; }
+  .evidence li { margin:6px 0; line-height:1.6; }
+  .shots { display:flex; gap:12px; flex-wrap:wrap; }
+  .shots img { max-width:100%; border:1px solid #e0e4e8; border-radius:8px; cursor:zoom-in; }
+  .chain { font-family:Consolas, monospace; font-size:13px; background:#f4f6f8; padding:12px 14px; border-radius:8px; word-break:break-all; }
+  .chain .arrow { color:#5b8def; font-weight:700; padding:0 6px; }
+  .summary { line-height:1.8; font-size:15px; }
+  .meta { font-size:12px; color:#95a5a6; line-height:1.8; }
+  .footnote { font-size:12px; color:#95a5a6; border-top:1px dashed #dfe3e7; padding-top:10px; margin-top:20px; line-height:1.8; }
+  .flag { display:inline-block; background:#fdecea; color:var(--red); border-radius:4px; padding:1px 8px; font-size:12px; margin-right:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>诈骗网站识别报告
+      <span class="level {{ level }}">{{ level_label }}</span></h1>
+    <div class="url">目标：{{ url }}</div>
+    {% if blocked_by %}
+    <div style="margin-top:14px;background:#fdecea;border:1px solid #f5b7b1;
+                border-radius:8px;padding:12px 16px;color:var(--red);
+                font-size:14px;line-height:1.7">
+      <b>⛔ 已由诈骗网址库直接拦截</b><br>
+      该网址已被用户举报并经审核确认为诈骗网站（来源：
+      {% if blocked_by == 'builtin' %}内置黑名单{% else %}用户举报{% endif %}），
+      本次未调用大模型检测。请勿访问。
+    </div>
+    {% elif level == 'low' %}
+    <div style="margin-top:14px;background:#eafaf1;border:1px solid #a9dfbf;
+                border-radius:8px;padding:12px 16px;color:#1e8449;
+                font-size:14px;line-height:1.7">
+      ✅ 判定为低风险。如需访问该网址，建议使用
+      <a href="/safe?url={{ url | urlencode }}"
+         style="color:#1e8449;font-weight:600">沙箱安全访问</a>
+      （页面将在隔离浏览器中打开并回传截图，真实设备不接触目标站点）。
+    </div>
+    {% endif %}
+    <div class="score-box" style="margin-top:14px">
+      <div class="score" style="color:{{ score_color }}">{{ score }}</div>
+      <div style="flex:1">
+        <div>综合风险评分（0-100）· 置信度 {{ "%.0f"|format(confidence * 100) }}%</div>
+        <div class="dims">
+          {% for name, label, val, cap in dims %}
+          <div class="dim"><b>{{ val }}<small style="color:#95a5a6">/{{ cap }}</small></b>
+            <span>{{ label }}</span>
+            <div class="bar"><i style="width:{{ (val / cap * 100) | round(0, 'floor') }}%"></i></div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:16px">AI 结论</h2>
+    <p class="summary">{{ summary }}</p>
+  </div>
+
+  {% if risk_reasons %}
+  <div class="card">
+    <h2 style="font-size:16px">不可信原因分析（{{ risk_reasons|length }} 项）</h2>
+    <table>
+      <tr><th style="width:110px">类别</th><th>原因</th><th>依据</th></tr>
+      {% for r in risk_reasons %}
+      <tr>
+        <td><span class="flag">{{ r.category }}</span></td>
+        <td>{{ r.reason }}</td>
+        <td style="color:#7f8c8d">{{ r.evidence }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2 style="font-size:16px">证据链（{{ evidence|length }} 条）</h2>
+    <ul class="evidence">
+      {% for e in evidence %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  {% if screenshots %}
+  <div class="card">
+    <h2 style="font-size:16px">证据截图</h2>
+    <div class="shots">
+      {% for s in screenshots %}
+      <a href="{{ s }}" target="_blank"><img src="{{ s }}" alt="证据截图" width="420"></a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2 style="font-size:16px">重定向链</h2>
+    <div class="chain">
+      {% for u in redirect_chain %}{% if not loop.first %}<span class="arrow">→</span>{% endif %}{{ u }}{% endfor %}
+    </div>
+  </div>
+
+  {% if signals_table %}
+  <div class="card">
+    <h2 style="font-size:16px">静态预筛信号</h2>
+    <table>
+      <tr><th>信号</th><th>命中</th><th>说明</th></tr>
+      {% for s in signals_table %}
+      <tr><td>{{ s.name }}</td>
+          <td>{% if s.hit %}<span class="flag">命中</span>{% else %}<span style="color:#95a5a6">—</span>{% endif %}</td>
+          <td>{{ s.detail }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="meta">
+      任务 ID：{{ task_id }} · 隔离级别：{{ isolation_level }} ·
+      Agent 轮数：{{ agent_rounds }} · 规则分：{{ rule_score }} / AI 分：{{ llm_score }}<br>
+      报告生成时间：{{ generated_at }}
+    </div>
+    <div class="footnote">
+      {% if isolation_level == 'L2' %}
+      ⚠ 本报告生成时运行于 <b>L2 受限浏览器配置</b>：该级别只是进程级加固、不是沙箱，
+      无法抵御针对浏览器漏洞的 drive-by 攻击；测试集应避免包含已知活跃挂马站点（黑名单先行拦截）。
+      {% else %}
+      本报告生成时运行于 <b>L1 Docker 容器隔离</b>：浏览器运行于一次性容器内，任务结束后已销毁。
+      {% endif %}<br>
+      本报告由自动化 demo 生成，仅供安全研究参考，不构成最终处置依据。
+    </div>
+  </div>
+</div>
+</body>
+</html>

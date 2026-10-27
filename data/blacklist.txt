@@ -1,0 +1,8 @@
+# 内置黑名单样例（demo 用，命中即一票判定高风险）
+# 格式：每行一个注册主域或完整 URL
+# 来源建议：PhishTank 等公开 feeds 定期更新（§8.2 L2 降级风险缓解）
+phish-example-001.top
+fake-alipay-secure.xyz
+taobao-vip-login.tk
+bank-verify-account.click
+example-phish.site

@@ -1,0 +1,63 @@
+# 诈骗网站识别 demo 配置
+# 注意：API key 一律从环境变量读取，不入代码库
+
+llm:
+  # 切换本地模型时只改这里：provider: local
+  provider: qwen
+  qwen:
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_API_KEY"
+    text_model: "qwen-plus"
+    vision_model: "qwen3-vl-plus"   # 该 API 通道下 qwen-vl-plus 不存在，用 qwen3-vl-plus
+    supports_vision: true
+    max_context_tokens: 32000
+  local:
+    base_url: "http://localhost:11434/v1"   # Ollama 示例
+    api_key_env: ""                          # 本地无需 key
+    text_model: "qwen2.5:14b"
+    vision_model: "qwen2.5vl:7b"
+    supports_vision: true                    # 本地模型无视觉能力时改为 false，研判自动降级
+    max_context_tokens: 8000
+  agent:
+    max_tool_rounds: 8
+    temperature: 0.2
+  retry:
+    timeout_seconds: 60
+    max_retries: 3
+    backoff_base_seconds: 1.5
+
+sandbox:
+  # 隔离级别: auto = 优先 L1(Docker)，Docker 不可用时降级 L2；也可强制指定 l1 / l2
+  isolation: auto
+  docker:
+    image: "mcr.microsoft.com/playwright/python:v1.49.0-jammy"
+    cdp_port: 9222
+    evidence_dir_container: "/data/evidence"
+  browser:
+    viewport_width: 1280
+    viewport_height: 720
+    navigation_timeout_seconds: 30
+  # 容器 CDP 就绪策略：容器内确认就绪后宿主机快速探测，映射不通自动换端口重建
+  cdp_wait_timeout_seconds: 120
+  cdp_port_rotate_rounds: 5
+
+precheck:
+  # 内置黑名单：命中即一票判定为高风险，跳过 agent
+  blacklist_file: "data/blacklist.txt"
+  whois_fresh_days: 30        # 注册时间短于该天数视为可疑
+
+analyze:
+  page_text_max_chars: 3000
+
+moderation:
+  # 举报自动审核阈值：静态预筛风险分 ≥ 该值自动确认入库，否则转人工
+  auto_approve_score: 40
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+
+storage:
+  db_path: "data/fraud_detector.db"
+  evidence_dir: "static/evidence"
+  report_dir: "static/reports"

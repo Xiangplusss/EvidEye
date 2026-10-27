@@ -1,0 +1,34 @@
+# ---- 密钥 / 环境 ----
+.env
+.env.*
+*.pem
+*.key
+config.local.yaml
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- 运行时产物：样本库、证据、报告（含真实站点数据，绝不入库）----
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/evidence-debug/
+static/evidence/
+static/reports/
+*.log
+
+# ---- 如确需公开样例，请显式强制添加（务必先脱敏）----
+# git add -f static/reports/sample_report.html
+# git add -f data/blacklist.txt
